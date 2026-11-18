@@ -20,7 +20,9 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || "0.0.0.0";
-const DATA_DIR = path.join(__dirname, ".zeus-data");
+// ZEUS_DATA lets hosts with a persistent volume mount (e.g. /data) keep the
+// D1 database across redeploys. Falls back to ./.zeus-data next to this file.
+const DATA_DIR = process.env.ZEUS_DATA ? path.resolve(process.env.ZEUS_DATA) : path.join(__dirname, ".zeus-data");
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 const scriptPath = path.join(__dirname, "Source.js");
