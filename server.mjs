@@ -50,6 +50,43 @@ if (!fs.existsSync(scriptPath)) {
   process.exit(1);
 }
 
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+
+// Alpine (musl) containers cannot exec the glibc-linked workerd binary
+// directly — it needs /lib64/ld-linux-x86-64.so.2 which musl systems lack.
+// We ship a small glibc 2.35 runtime in ./zeus-libs and launch workerd
+// through its loader. Miniflare honours MINIFLARE_WORKERD_PATH for exactly
+// this purpose, so no file inside node_modules is ever modified.
+function prepareMuslWorkerd() {
+  const isMusl = fs.existsSync("/etc/alpine-release") || process.env.ZEUS_FORCE_MUSL === "1";
+  if (!isMusl) return;
+  let workerdBin;
+  try {
+    workerdBin = require.resolve("@cloudflare/workerd-linux-64/bin/workerd");
+  } catch (e) {
+    console.error("[zeus-host] cannot resolve workerd binary:", e.message);
+    return;
+  }
+  const libsDir = path.join(__dirname, "zeus-libs");
+  const loader = path.join(libsDir, "ld-linux-x86-64.so.2");
+  if (!fs.existsSync(loader)) {
+    console.error("[zeus-host] zeus-libs loader missing; continuing without musl shim");
+    return;
+  }
+  const launcher = path.join(DATA_DIR, "zeus-workerd-launcher.sh");
+  const script = [
+    "#!/bin/sh",
+    `exec "${loader}" --library-path "${libsDir}" "${workerdBin}" "$@"`,
+    "",
+  ].join("\n");
+  fs.writeFileSync(launcher, script);
+  fs.chmodSync(launcher, 0o755);
+  process.env.MINIFLARE_WORKERD_PATH = launcher;
+  console.log("[zeus-host] musl detected — workerd will run via shipped glibc loader");
+}
+prepareMuslWorkerd();
+
 console.log(`[zeus-host] booting workerd runtime (D1: persistent @ ${DATA_DIR}) ...`);
 
 const mf = new Miniflare({
