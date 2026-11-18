@@ -1,0 +1,19 @@
+{
+  "name": "zeus-panel-host",
+  "version": "2.4.2",
+  "private": true,
+  "description": "ZEUS Panel (Cloudflare Worker) hosted on a Node.js runtime via Miniflare (workerd) with emulated D1 database",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "miniflare": "^4.20251110.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "allowScripts": {
+    "workerd@1.20260730.1": true
+  }
+}

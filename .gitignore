@@ -1,0 +1,4 @@
+node_modules/
+.zeus-data/
+zeus*.log
+*.log
