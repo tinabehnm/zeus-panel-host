@@ -20,10 +20,29 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || "0.0.0.0";
-// ZEUS_DATA lets hosts with a persistent volume mount (e.g. /data) keep the
-// D1 database across redeploys. Falls back to ./.zeus-data next to this file.
-const DATA_DIR = process.env.ZEUS_DATA ? path.resolve(process.env.ZEUS_DATA) : path.join(__dirname, ".zeus-data");
-fs.mkdirSync(DATA_DIR, { recursive: true });
+const os = await import("node:os");
+// Pick the first WRITABLE data dir: ZEUS_DATA env, ./<script-dir>/.zeus-data, /data, /tmp fallback.
+// Some PaaS runners execute as a non-root user with a read-only app dir, so we
+// must not crash on mkdir — try candidates in order and keep D1 persistent.
+function pickDataDir() {
+  const candidates = [];
+  if (process.env.ZEUS_DATA) candidates.push(path.resolve(process.env.ZEUS_DATA));
+  candidates.push(path.join(__dirname, ".zeus-data"));
+  candidates.push("/data/.zeus-data");
+  candidates.push(path.join(os.tmpdir(), "zeus-data"));
+  for (const dir of candidates) {
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.accessSync(dir, fs.constants.W_OK);
+      return dir;
+    } catch (e) {
+      console.log(`[zeus-host] data dir unusable (${dir}): ${e.code || e.message}`);
+    }
+  }
+  console.error("FATAL: no writable data dir found for D1 persistence");
+  process.exit(1);
+}
+const DATA_DIR = pickDataDir();
 
 const scriptPath = path.join(__dirname, "Source.js");
 if (!fs.existsSync(scriptPath)) {
